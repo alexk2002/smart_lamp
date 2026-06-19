@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SmartLamp — Companion App Prototype v7</title>
+<style>
+  :root{
+    --bg-room:#14181f; --bg-room-deep:#0b0e13; --panel:#1b212b;
+    --panel-raised:#222a36; --line:#2d3644; --ink:#eef1f6;
+    --ink-dim:#9aa5b4; --ink-faint:#5d6776;
+    --accent-screen:#6ea8ff; --accent-paper:#ffb454;
+    --accent-green:#5fd98a; --accent-warn:#ff6b6b;
+    --accent-sensor:#7fe7d0; --good:#5fd3a0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg-room-deep);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .display{font-family:Georgia,"Iowan Old Style","Palatino Linotype",Palatino,serif;}
+  ::selection{background:#3a4a63;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px;}
+
+  /* ── MASTHEAD ── */
+  .masthead{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:40px;flex-wrap:wrap;}
+  .masthead h1{font-family:Georgia,serif;font-weight:700;font-size:clamp(26px,3.5vw,38px);margin:0;letter-spacing:-0.01em;}
+  .masthead .tag{color:var(--ink-faint);font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;}
+  .masthead-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .profile-chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:100px;padding:6px 14px;}
+  .profile-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent-screen),var(--accent-paper));display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:700;font-size:11px;color:#0b0e13;flex-shrink:0;}
+  .unlink-btn{background:none;border:1px solid var(--line);color:var(--ink-faint);font-size:12px;padding:6px 14px;border-radius:100px;cursor:pointer;transition:all .15s;}
+  .unlink-btn:hover{border-color:var(--accent-warn);color:var(--accent-warn);}
+  .unlink-btn.linked{border-color:rgba(95,211,160,0.4);color:var(--good);}
+  .nfc-badge{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-faint);background:var(--panel);border:1px solid var(--line);border-radius:100px;padding:5px 12px;}
+  .clock-chip{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:100px;padding:7px 14px;font-size:12.5px;color:var(--ink-dim);}
+  .clock-chip b{color:var(--ink);font-weight:600;}
+  .speed-btns{display:flex;gap:4px;margin-left:6px;}
+  .speed-btns button{background:none;border:1px solid var(--line);color:var(--ink-faint);font-size:11px;padding:3px 7px;border-radius:6px;cursor:pointer;}
+  .speed-btns button.active{background:var(--accent-screen);color:#0b0e13;border-color:var(--accent-screen);font-weight:600;}
+
+  /* ── BLOCK SHELL ── */
+  .v5-block{background:var(--panel);border:1px solid var(--line);border-radius:20px;margin-bottom:20px;overflow:hidden;}
+  .v5-block-header{display:flex;align-items:center;justify-content:space-between;padding:20px 26px 0;gap:12px;}
+  .v5-block-title{font-family:Georgia,serif;font-size:22px;font-weight:700;margin:0;}
+  .v5-block-body{padding:20px 26px 26px;}
+
+  /* ── LAMP VISUAL ── */
+  .stage{
+    position:relative;
+    background:radial-gradient(ellipse 120% 100% at 50% 0%, #1b2230 0%, var(--bg-room) 55%, var(--bg-room-deep) 100%);
+    min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    padding:40px 24px 28px;overflow:hidden;
+  }
+  .stage::before{content:'';position:absolute;inset:0;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:28px 28px;opacity:0.08;pointer-events:none;}
+  .stage .lamp-scene{flex-shrink:0;}
+  @media(max-width:700px){
+    .stage{padding-top:18px;}
+    .state-readout{position:static!important;top:auto!important;left:auto!important;right:auto!important;
+      display:flex!important;flex-direction:column!important;margin-bottom:16px;width:100%;}
+    .readout-card{min-width:0!important;width:100%!important;}
+    .lamp-scene{transform:scale(0.82);transform-origin:bottom center;margin-top:-14px;}
+  }
+  .state-readout{position:absolute;top:20px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:flex-start;z-index:4;flex-wrap:wrap;gap:12px;}
+  .readout-card{background:rgba(15,18,24,0.72);border:1px solid var(--line);border-radius:14px;padding:14px 18px;backdrop-filter:blur(6px);min-width:200px;}
+  .readout-label{font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px;}
+  .readout-value{font-family:Georgia,serif;font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .mode-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .readout-sub{font-size:11.5px;color:var(--ink-dim);margin-top:4px;line-height:1.5;}
+  .tag-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:100px;font-size:10.5px;margin-top:8px;margin-right:6px;border:1px solid;}
+  .tag-pill.blink{background:rgba(255,107,107,0.16);color:#ff9a9a;border-color:rgba(255,107,107,0.4);}
+  .tag-pill.override{background:rgba(255,180,84,0.14);color:var(--accent-paper);border-color:rgba(255,180,84,0.4);}
+  .tag-pill.cooldown{background:rgba(95,211,160,0.14);color:var(--good);border-color:rgba(95,211,160,0.4);}
+  .tag-pill.sensor{background:rgba(127,231,208,0.14);color:var(--accent-sensor);border-color:rgba(127,231,208,0.4);}
+  .lamp-scene{position:relative;display:flex;flex-direction:column;align-items:center;z-index:2;}
+  .glow-pool{position:absolute;width:520px;height:280px;bottom:-40px;left:50%;transform:translateX(-50%);border-radius:50%;filter:blur(8px);transition:background 900ms ease,opacity 700ms ease;z-index:0;pointer-events:none;}
+  .desk-surface{position:relative;width:520px;height:14px;background:linear-gradient(180deg,#2a3140,#171b22);border-radius:3px;margin-top:6px;box-shadow:0 6px 24px rgba(0,0,0,0.5);}
+  .lamp-svg-wrap{position:relative;z-index:3;filter:drop-shadow(0 18px 24px rgba(0,0,0,0.45));}
+  .blink-flash{position:absolute;inset:-60px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.9) 0%,rgba(255,255,255,0) 70%);opacity:0;pointer-events:none;}
+  .blink-flash.on{animation:blinkPulse 0.55s ease-in-out 3;}
+  @keyframes blinkPulse{0%{opacity:0;}25%{opacity:0.85;}50%{opacity:0;}75%{opacity:0.6;}100%{opacity:0;}}
+
+  /* ── AUTOMATIC BLOCK ── */
+  .auto-toggle-desc{font-size:13.5px;color:var(--ink-dim);line-height:1.55;max-width:660px;}
+  .switch{position:relative;display:inline-block;width:52px;height:30px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;cursor:pointer;inset:0;background:var(--line);border-radius:100px;transition:.2s;}
+  .switch .slider::before{position:absolute;content:"";height:22px;width:22px;left:4px;bottom:4px;background:var(--ink-dim);border-radius:50%;transition:.2s;}
+  .switch input:checked + .slider{background:var(--accent-screen);}
+  .switch input:checked + .slider::before{transform:translateX(22px);background:#0b0e13;}
+
+  .auto-status-box{margin-top:16px;background:var(--bg-room);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:none;}
+  .auto-status-box.visible{display:block;}
+  .auto-status-mode{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .auto-status-mode-badge{padding:5px 14px;border-radius:100px;font-size:13px;font-weight:700;letter-spacing:0.02em;}
+  .auto-status-mode-badge.screen{background:rgba(110,168,255,0.18);color:var(--accent-screen);border:1px solid rgba(110,168,255,0.35);}
+  .auto-status-mode-badge.paper{background:rgba(255,180,84,0.18);color:var(--accent-paper);border:1px solid rgba(255,180,84,0.35);}
+  .auto-status-mode-badge.green{background:rgba(95,217,138,0.18);color:var(--accent-green);border:1px solid rgba(95,217,138,0.35);}
+  .auto-status-rationale{font-size:13px;color:var(--ink-dim);line-height:1.6;}
+  .auto-status-rationale b{color:var(--ink);}
+  .auto-status-override-note{margin-top:12px;font-size:12px;color:var(--ink-faint);border-top:1px solid var(--line);padding-top:12px;}
+
+  .break-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;border-radius:12px;padding:14px 16px;margin-top:16px;flex-wrap:wrap;}
+  .break-banner.firing{background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.4);}
+  .break-banner.cooldown{background:rgba(95,211,160,0.08);border:1px solid rgba(95,211,160,0.35);}
+  .break-banner .bb-text{font-size:13.5px;color:var(--ink);}
+  .break-banner .bb-sub{font-size:12px;color:var(--ink-dim);margin-top:2px;}
+  .break-banner button{background:var(--accent-warn);border:none;color:#1a0a0a;font-size:12.5px;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;white-space:nowrap;}
+  .break-banner.cooldown button{background:var(--good);color:#0a1a12;}
+
+  /* ── MANUAL BLOCK ── */
+  .manual-note{font-size:12.5px;color:var(--ink-faint);line-height:1.6;margin-bottom:22px;padding:12px 16px;background:var(--bg-room);border:1px solid var(--line);border-radius:10px;}
+  .manual-note b{color:var(--ink-dim);}
+  .mode-toggle-big{display:flex;gap:14px;margin-bottom:22px;}
+  @media(max-width:560px){.mode-toggle-big{flex-direction:column;}}
+  .mode-card{flex:1;border-radius:16px;border:1.5px solid var(--line);padding:18px;cursor:pointer;background:var(--bg-room);transition:all .15s ease;position:relative;}
+  .mode-card.active.screen{border-color:var(--accent-screen);background:linear-gradient(155deg,rgba(110,168,255,0.12),var(--bg-room));}
+  .mode-card.active.paper{border-color:var(--accent-paper);background:linear-gradient(155deg,rgba(255,180,84,0.12),var(--bg-room));}
+  .mode-card.active.green{border-color:var(--accent-green);background:linear-gradient(155deg,rgba(95,217,138,0.12),var(--bg-room));}
+  .mode-card .mc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .mode-card .mc-name{font-family:Georgia,serif;font-size:18px;font-weight:700;}
+  .mode-card .mc-check{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line);flex-shrink:0;}
+  .mode-card.active.screen .mc-check{background:var(--accent-screen);border-color:var(--accent-screen);}
+  .mode-card.active.paper .mc-check{background:var(--accent-paper);border-color:var(--accent-paper);}
+  .mode-card.active.green .mc-check{background:var(--accent-green);border-color:var(--accent-green);}
+  .mc-variant{font-size:12px;color:var(--ink-dim);margin-top:8px;}
+  .mc-variant b{color:var(--ink);}
+
+  .lux-row{display:flex;align-items:center;gap:12px;margin-bottom:24px;background:var(--bg-room);border:1px solid var(--line);border-radius:12px;padding:14px 18px;}
+  .lux-row label{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.07em;white-space:nowrap;width:90px;flex-shrink:0;}
+  .lux-row input[type=range]{flex:1;}
+  .lux-row .lux-val{font-size:13px;color:var(--ink-dim);width:40px;text-align:right;flex-shrink:0;}
+
+  .section-title{font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-faint);margin:24px 0 12px;}
+  .section-title:first-child{margin-top:0;}
+  .variant-trace{background:var(--bg-room);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:20px;}
+  .vt-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-faint);margin-bottom:8px;}
+  .vt-rule{display:flex;align-items:baseline;gap:8px;font-size:12.5px;color:var(--ink-dim);padding:3px 0;}
+  .vt-rule .vr-arrow{color:var(--ink-faint);}
+  .vt-rule.matched{color:var(--good);}
+  .vt-rule.matched .vr-arrow{color:var(--good);}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px;}
+  .stat-box{background:var(--bg-room);border:1px solid var(--line);border-radius:12px;padding:14px;}
+  .stat-box .sb-num{font-family:Georgia,serif;font-size:22px;font-weight:700;}
+  .stat-box .sb-label{font-size:10px;color:var(--ink-faint);text-transform:uppercase;margin-top:4px;}
+
+  .section-divider{border:none;border-top:1px solid var(--line);margin:24px 0;}
+  .timeline-track{position:relative;background:var(--bg-room);border:1px solid var(--line);border-radius:14px;padding:18px 18px 28px;margin-bottom:14px;}
+  .tl-hours{position:relative;height:44px;margin-bottom:6px;}
+  .tl-hour-mark{position:absolute;top:0;bottom:0;width:1px;background:var(--line);}
+  .tl-hour-label{position:absolute;top:-2px;font-size:10px;color:var(--ink-faint);transform:translateX(-50%);}
+  .tl-blocks-row{position:relative;height:54px;background:rgba(255,255,255,0.02);border-radius:8px;}
+  .tl-block{position:absolute;top:6px;bottom:6px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;font-size:11px;font-weight:700;color:#0b0e13;padding:0 8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border:1.5px solid var(--bg-room);box-sizing:border-box;}
+  .tl-block.screen{background:var(--accent-screen);}
+  .tl-block.paper{background:var(--accent-paper);}
+  .tl-block.green{background:var(--accent-green);}
+  .tl-block .tl-del{position:absolute;top:1px;right:2px;font-size:11px;opacity:0.55;line-height:1;padding:2px;}
+  .tl-block .tl-del:hover{opacity:1;}
+  .tl-now-line{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 8px rgba(255,255,255,0.7);z-index:5;}
+  .tl-now-tag{position:absolute;top:-22px;transform:translateX(-50%);font-size:10px;background:#fff;color:#0b0e13;padding:1px 6px;border-radius:4px;white-space:nowrap;}
+  .timeline-builder{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;}
+  .field{flex:1;min-width:120px;}
+  .field label{display:block;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+  .field input,.field select{width:100%;background:var(--bg-room);border:1px solid var(--line);color:var(--ink);padding:10px 12px;border-radius:10px;font-size:13.5px;font-family:inherit;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent-screen);}
+  .add-block-btn{background:var(--accent-screen);color:#0b0e13;border:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;height:42px;}
+  .block-list{display:flex;flex-direction:column;gap:8px;}
+  .block-row{display:flex;align-items:center;gap:12px;background:var(--bg-room);border:1px solid var(--line);border-radius:10px;padding:10px 14px;}
+  .block-row .br-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .block-row .br-time{font-size:12.5px;color:var(--ink-dim);width:110px;flex-shrink:0;}
+  .block-row .br-label{flex:1;font-size:13.5px;}
+  .block-row .br-del{background:none;border:none;color:var(--ink-faint);cursor:pointer;font-size:16px;}
+  .block-row.is-now{border-color:var(--accent-screen);box-shadow:0 0 0 1px rgba(110,168,255,0.3);}
+  .block-row.is-overridden{border-color:var(--accent-paper);border-style:dashed;}
+  .empty-note{color:var(--ink-faint);font-size:13px;padding:14px 0;}
+
+  /* ── PROFILE BLOCK ── */
+  .profile-card-top{display:flex;gap:16px;align-items:center;margin-bottom:24px;}
+  .avatar-circle{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent-screen),var(--accent-paper));display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:700;font-size:20px;color:#0b0e13;flex-shrink:0;}
+  .field-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .toggle-pill-group{display:flex;gap:8px;flex-wrap:wrap;}
+  .toggle-pill{padding:8px 16px;border-radius:100px;border:1px solid var(--line);background:var(--bg-room);color:var(--ink-dim);font-size:13px;cursor:pointer;font-weight:500;}
+  .toggle-pill.active{background:var(--accent-screen);color:#0b0e13;border-color:var(--accent-screen);font-weight:600;}
+  .pattern-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .pattern-bar-row .pb-label{width:70px;font-size:12px;color:var(--ink-dim);flex-shrink:0;}
+  .pattern-bar-track{flex:1;height:10px;background:var(--bg-room);border-radius:6px;overflow:hidden;display:flex;}
+  .pattern-bar-fill.screen{background:var(--accent-screen);height:100%;}
+  .pattern-bar-fill.paper{background:var(--accent-paper);height:100%;}
+  .pfooter{font-size:12px;color:var(--ink-faint);margin-top:8px;}
+
+  input[type="range"]{accent-color:var(--accent-screen);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- MASTHEAD -->
+  <div class="masthead">
+    <div>
+      <h1 class="display">SmartLamp</h1>
+      <div class="tag">Companion app — interactive prototype v7</div>
+    </div>
+    <div class="masthead-right">
+      <div class="profile-chip">
+        <div class="profile-avatar" id="headerAvatar">N</div>
+        <span id="headerProfileName" style="font-size:13px;font-weight:600;padding-right:4px;"></span>
+      </div>
+      <div class="nfc-badge">📡 NFC</div>
+      <button class="unlink-btn" id="btnUnlink">Unlink lamp</button>
+      <div class="clock-chip">
+        <span>SIM TIME</span>
+        <b id="clockDisplay">9:15 AM</b>
+        <div class="speed-btns" id="speedBtns">
+          <button data-speed-idx="0">1×</button>
+          <button data-speed-idx="1" class="active">60×</button>
+          <button data-speed-idx="2">600×</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAMP VISUAL -->
+  <div class="v5-block">
+    <div class="stage">
+      <div class="state-readout">
+        <div class="readout-card">
+          <div class="readout-label">Lamp state (hardware truth)</div>
+          <div class="readout-value"><span class="mode-dot" id="lampModeDot"></span><span id="lampModeText">Screen mode</span></div>
+          <div class="readout-sub" id="lampSubText"></div>
+          <div id="tagPills"></div>
+        </div>
+        <div class="readout-card">
+          <div class="readout-label">Scheduled (timeline)</div>
+          <div class="readout-value" style="font-size:16px;" id="scheduledLabel">No block now</div>
+          <div class="readout-sub" id="scheduledSub"></div>
+        </div>
+      </div>
+      <div class="lamp-scene">
+        <div class="glow-pool" id="glowPool"></div>
+        <div style="position:relative;">
+          <div class="blink-flash" id="blinkFlash"></div>
+          <svg width="200" height="240" viewBox="0 0 200 240" class="lamp-svg-wrap">
+            <defs>
+              <radialGradient id="bulbGlow" cx="50%" cy="50%" r="50%">
+                <stop id="bulbGlowStop1" offset="0%" stop-color="#aeccff" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="#aeccff" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="armMetal" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3b4452"/>
+                <stop offset="100%" stop-color="#222834"/>
+              </linearGradient>
+            </defs>
+            <ellipse cx="100" cy="118" r="85" fill="url(#bulbGlow)"/>
+            <rect x="55" y="206" width="90" height="14" rx="7" fill="#262d38" stroke="#384151"/>
+            <rect x="90" y="150" width="20" height="58" rx="6" fill="url(#armMetal)"/>
+            <path d="M 100 150 L 70 95" stroke="url(#armMetal)" stroke-width="11" stroke-linecap="round"/>
+            <circle cx="100" cy="150" r="9" fill="#414b5a"/>
+            <circle cx="70" cy="95" r="8" fill="#414b5a"/>
+            <path d="M 36 100 L 104 88 L 110 108 L 40 124 Z" fill="#2a313c" stroke="#3a4452" stroke-width="1.5"/>
+            <ellipse id="bulbEllipse" cx="42" cy="112" rx="9" ry="13" fill="#aeccff" opacity="1"/>
+            <ellipse cx="42" cy="112" rx="9" ry="13" fill="none" stroke="#1a1f27" stroke-width="2"/>
+            <circle id="lampLed" cx="100" cy="150" r="3" fill="#aeccff"/>
+          </svg>
+        </div>
+        <div class="desk-surface"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTOMATIC -->
+  <div class="v5-block">
+    <div class="v5-block-header">
+      <div class="v5-block-title">Automatic</div>
+      <label class="switch" style="margin-top:2px;">
+        <input type="checkbox" id="autoDetectToggle"/>
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="v5-block-body">
+      <div class="auto-toggle-desc">When on, the lamp manages mode, color, and intensity by itself — based on time of day, session duration, your profile, and whether you're facing a screen or paper. Turn it off to control everything manually below.</div>
+
+      <!-- Live status box (when ON) -->
+      <div class="auto-status-box" id="autoStatusBox">
+        <div class="auto-status-mode">
+          <span class="auto-status-mode-badge" id="autoModeBadge">Screen</span>
+          <span style="font-size:13px;color:var(--ink-dim);">chosen automatically</span>
+        </div>
+        <div class="auto-status-rationale" id="autoRationale"></div>
+        <div class="auto-status-override-note">Select a mode in Manual override below to take over. The system resumes after the next block transition or sensor change.</div>
+      </div>
+
+      <!-- Break reminder -->
+      <div class="break-banner" id="breakBanner" style="display:none;">
+        <div>
+          <div class="bb-text" id="breakBannerText">Break reminder firing</div>
+          <div class="bb-sub" id="breakBannerSub"></div>
+        </div>
+        <button id="btnPauseBreak">Pause / acknowledge</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANUAL OVERRIDE -->
+  <div class="v5-block">
+    <div class="v5-block-header">
+      <div class="v5-block-title">Manual override</div>
+    </div>
+    <div class="v5-block-body">
+      <div class="manual-note">Even in manual mode, <b>color temperature and intensity adapt automatically</b> within your chosen mode — the rule engine keeps optimising for your profile, time of day, and ambient light. Manual control determines <em>which mode</em> and <em>when</em> (via the timeline below); the system handles the rest.</div>
+
+      <div class="mode-toggle-big">
+        <div class="mode-card screen" id="modeCardScreen">
+          <div class="mc-top"><span class="mc-name">Screen</span><span class="mc-check"></span></div>
+          <div style="font-size:13px;color:var(--ink-dim);">Tuned to reduce eye strain at the monitor.</div>
+          <div class="mc-variant" id="mcVariantScreen" style="display:none;">active variant: <b></b></div>
+        </div>
+        <div class="mode-card paper" id="modeCardPaper">
+          <div class="mc-top"><span class="mc-name">Paper</span><span class="mc-check"></span></div>
+          <div style="font-size:13px;color:var(--ink-dim);">Tuned for reading and writing on paper.</div>
+          <div class="mc-variant" id="mcVariantPaper" style="display:none;">active variant: <b></b></div>
+        </div>
+        <div class="mode-card green" id="modeCardGreen">
+          <div class="mc-top"><span class="mc-name">Blue light counter</span><span class="mc-check"></span></div>
+          <div style="font-size:13px;color:var(--ink-dim);">Counters screen blue light with a calculated warm-spectrum ambient glow — no filter on the display.</div>
+          <div class="mc-variant" id="mcVariantGreen" style="display:none;">active variant: <b></b></div>
+        </div>
+      </div>
+
+      <div class="lux-row">
+        <label>Ambient lux</label>
+        <input type="range" min="10" max="500" value="220" id="luxSlider"/>
+        <span class="lux-val"><span id="luxValue">220</span></span>
+      </div>
+
+      <div class="section-title">Why this variant — rule trace</div>
+      <div class="variant-trace">
+        <div class="vt-label" id="ruleTraceLabel">Screen mode rules · first match wins</div>
+        <div id="ruleList"></div>
+        <div id="variantNote" style="margin-top:10px;font-size:12.5px;color:var(--ink-dim);line-height:1.6;"></div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="sb-num"><span id="statSession">0</span><span style="font-size:13px;"> min</span></div><div class="sb-label">Session</div></div>
+        <div class="stat-box"><div class="sb-num"><span id="statLux">220</span><span style="font-size:13px;"> lux</span></div><div class="sb-label">Ambient</div></div>
+        <div class="stat-box"><div class="sb-num" id="statTime">09:15</div><div class="sb-label">Local time</div></div>
+      </div>
+
+      <hr class="section-divider"/>
+
+      <div class="section-title">Timeline — scheduled blocks</div>
+      <div class="timeline-track">
+        <div class="tl-hours" id="tlHours"></div>
+        <div class="tl-blocks-row" id="tlBlocksRow"></div>
+      </div>
+      <div class="section-title">Add a block</div>
+      <div class="timeline-builder">
+        <div class="field" style="min-width:110px;"><label>Start</label><input type="time" id="newStart" value="09:00"/></div>
+        <div class="field" style="min-width:110px;"><label>End</label><input type="time" id="newEnd" value="10:00"/></div>
+        <div class="field" style="min-width:160px;"><label>Mode</label>
+          <select id="newMode">
+            <option value="screen">Screen</option>
+            <option value="paper">Paper</option>
+            <option value="green">Blue light counter</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:160px;"><label>Label</label><input type="text" id="newLabel" placeholder="e.g. Deep work"/></div>
+        <button class="add-block-btn" id="btnAddBlock">Add block</button>
+      </div>
+      <div class="section-title">Block list &amp; override status</div>
+      <div class="block-list" id="blockList"></div>
+    </div>
+  </div>
+
+  <!-- PROFILE -->
+  <div class="v5-block">
+    <div class="v5-block-header">
+      <div class="v5-block-title">Profile</div>
+    </div>
+    <div class="v5-block-body">
+      <div class="profile-card-top">
+        <div class="avatar-circle" id="avatarLetter">N</div>
+        <div style="flex:1;">
+          <div class="field" style="margin-bottom:0;"><label>Name</label><input type="text" id="profileName"/></div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Age</label><input type="number" id="profileAge" min="10" max="99"/></div>
+        <div class="field"><label>Role</label>
+          <select id="profileRole">
+            <option value="student">Student</option>
+            <option value="developer">Developer</option>
+            <option value="designer">Designer / creative</option>
+            <option value="writer">Writer</option>
+            <option value="analyst">Analyst</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field"><label>Eyewear</label>
+          <select id="profileEyewear">
+            <option value="none">None</option>
+            <option value="blue-light">Blue-light filtering</option>
+            <option value="reading">Reading glasses</option>
+            <option value="bifocal-progressive">Bifocal / progressive</option>
+            <option value="standard-rx">Standard Rx</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row" style="align-items:center;">
+        <div class="field" style="min-width:180px;"><label>Pause every (min)</label><input type="number" id="breakInterval" min="5" max="120"/></div>
+        <div class="field">
+          <label>Theme</label>
+          <div class="toggle-pill-group" id="themePills">
+            <div class="toggle-pill" data-theme="auto">auto</div>
+            <div class="toggle-pill" data-theme="warm">warm</div>
+            <div class="toggle-pill" data-theme="cool">cool</div>
+          </div>
+        </div>
+      </div>
+      <div class="pfooter" style="margin-bottom:20px;">"Pause every" applies during Screen and Blue light counter sessions — repeats on this cadence. Restarts each time you acknowledge a reminder or begin a screen-like session.</div>
+      <div class="section-title">Usual mode pattern (illustrative)</div>
+      <div class="pattern-bar-row"><span class="pb-label">Morning</span><div class="pattern-bar-track"><div class="pattern-bar-fill screen" style="width:85%"></div><div class="pattern-bar-fill paper" style="width:15%"></div></div></div>
+      <div class="pattern-bar-row"><span class="pb-label">Afternoon</span><div class="pattern-bar-track"><div class="pattern-bar-fill screen" style="width:60%"></div><div class="pattern-bar-fill paper" style="width:40%"></div></div></div>
+      <div class="pattern-bar-row"><span class="pb-label">Evening</span><div class="pattern-bar-track"><div class="pattern-bar-fill screen" style="width:30%"></div><div class="pattern-bar-fill paper" style="width:70%"></div></div></div>
+      <div class="pfooter">Derived from historical mode-switch logs (mocked here) — feeds automatic mode suggestions.</div>
+    </div>
+  </div>
+
+</div><!-- /.wrap -->
+
+<script>
+(function(){
+  "use strict";
+
+  function pad(n){ return n.toString().padStart(2,'0'); }
+  function fmtClock(mins){
+    const h=Math.floor(mins/60)%24,m=Math.floor(mins%60);
+    const h12=((h+11)%12)+1;
+    return h12+':'+pad(m)+' '+(h<12?'AM':'PM');
+  }
+  function fmtClockShort(mins){
+    const h=Math.floor(mins/60)%24,m=Math.floor(mins%60);
+    return pad(h)+':'+pad(m);
+  }
+  function uid(){ return 'p'+Date.now()+Math.floor(Math.random()*1000); }
+
+  // ── RULE ENGINE ──
+  const RULES = {
+    screen:[
+      { id:'screen.breakdue', label:'Session ≥ break threshold (and not cooling down)',
+        cond:(ctx)=>ctx.breakState==='firing',
+        variant:{ key:'break-reminder', label:'Break reminder', warmth:0.35, brightness:0.9, blink:true,
+          note:(ctx)=>`${Math.round(ctx.minsSinceLastBreak)} min since the last pause, past the ${ctx.breakIntervalMins}-min recurring interval. Reminder is firing until acknowledged.` } },
+      { id:'screen.lowambient', label:'Ambient light below 80 lux',
+        cond:(ctx)=>ctx.ambientLux<80,
+        variant:{ key:'low-ambient-boost', label:'Dim-room boost', warmth:0.45, brightness:0.78,
+          note:(ctx)=>`Ambient sensor reads ${ctx.ambientLux} lux (dark room). Raising brightness slightly to offset eye strain from contrast.` } },
+      { id:'screen.eyewear-bluelight', label:'Eyewear: blue-light filtering glasses worn',
+        cond:(ctx)=>ctx.eyewear==='blue-light',
+        variant:{ key:'bluelight-compensated', label:'Blue-light-glasses compensated', warmth:0.18, brightness:0.68,
+          note:()=>'Blue-light filtering lenses already absorb high-frequency light — the lamp stays cooler/brighter to compensate for the tint.' } },
+      { id:'screen.evening', label:'Local time ≥ 19:00',
+        cond:(ctx)=>ctx.hour>=19||ctx.hour<5,
+        variant:{ key:'evening-warm-shift', label:'Evening warm-shift', warmth:0.55, brightness:0.55,
+          note:()=>'Past 7:00 PM. Shifting warmer and dimming to reduce melatonin disruption ahead of sleep.' } },
+      { id:'screen.midday', label:'Local time 11:00–16:00 & bright ambient',
+        cond:(ctx)=>ctx.hour>=11&&ctx.hour<16&&ctx.ambientLux>=300,
+        variant:{ key:'daylight-compensate', label:'Daylight compensation', warmth:0.2, brightness:0.45,
+          note:(ctx)=>`Midday with strong ambient daylight (${ctx.ambientLux} lux). Output trimmed since natural light is already handling the room.` } },
+      { id:'screen.default', label:'Default',
+        cond:()=>true,
+        variant:{ key:'standard-screen', label:'Standard screen-safe', warmth:0.3, brightness:0.62,
+          note:()=>'Baseline screen-mode tuning: cooler, lower-glare output for monitor viewing distance.' } }
+    ],
+    green:[
+      { id:'green.breakdue', label:'Session ≥ break threshold',
+        cond:(ctx)=>ctx.breakState==='firing',
+        variant:{ key:'break-reminder-green', label:'Break reminder', warmth:0.4, brightness:0.88, blink:true,
+          note:(ctx)=>`${Math.round(ctx.minsSinceLastBreak)} min since the last pause, past the ${ctx.breakIntervalMins}-min interval. Reminder firing — counter-balancing spectrum maintained during reminder; the lamp does not revert to standard white output.` } },
+      { id:'green.eyewear-bluelight', label:'Eyewear: blue-light filtering glasses worn',
+        cond:(ctx)=>ctx.eyewear==='blue-light',
+        variant:{ key:'bluelight-glasses-plus-counter', label:'Lens + ambient counter-balance', warmth:0.5, brightness:0.6,
+          note:()=>'Glasses already filter high-frequency light — ambient counter-balance dialed back to avoid over-warming the space. Spectrum tuned to complement the lens filtering rather than duplicate it.' } },
+      { id:'green.eveningshift', label:'Local time ≥ 18:00',
+        cond:(ctx)=>ctx.hour>=18||ctx.hour<5,
+        variant:{ key:'evening-counter-strong', label:'Evening counter-balance (strong)', warmth:0.78, brightness:0.7,
+          note:(ctx)=>`It's ${fmtClockShort(ctx.nowMins)} — peak window for blue-light disruption of evening signals. Shifted further toward red/amber. Spectrum shifts further toward 600–700 nm range to reduce melanopsin-pathway stimulation from the screen's blue peak.` } },
+      { id:'green.lowambient', label:'Ambient light below 80 lux',
+        cond:(ctx)=>ctx.ambientLux<80,
+        variant:{ key:'dim-room-counter-boost', label:'Dim-room counter boost', warmth:0.62, brightness:0.8,
+          note:(ctx)=>`Ambient reads ${ctx.ambientLux} lux. In a dark room screen blue light dominates more — counter-balance raised. Warm-spectrum boost raises ambient counter-balance without introducing a competing blue component into the room.` } },
+      { id:'green.daytime', label:'Local time 5:00–18:00 (daytime baseline)',
+        cond:(ctx)=>ctx.hour>=5&&ctx.hour<18,
+        variant:{ key:'daytime-counter-light', label:'Daytime counter-balance (light touch)', warmth:0.42, brightness:0.55,
+          note:()=>'Daytime: blue-light effect is less disruptive against natural light, so the counter-balance tone stays mild. Mild warm enrichment keeps counter-balance below the threshold where it would distort nearby color perception.' } },
+      { id:'green.default', label:'Default',
+        cond:()=>true,
+        variant:{ key:'standard-blue-light-counter', label:'Standard counter-balance', warmth:0.6, brightness:0.65,
+          note:()=>"Baseline blue light counter tuning: warm ambient glow offsetting the screen's blue-light peak without touching screen colors. Output uses a red/amber-enriched spectrum rather than standard white-LED output — the compensation is additive to the room, not subtractive from the screen." } }
+    ],
+    paper:[
+      { id:'paper.night', label:'Local time ≥ 21:00 or < 6:00',
+        cond:(ctx)=>ctx.hour>=21||ctx.hour<6,
+        variant:{ key:'late-night-read', label:'Late-night warm read', warmth:0.85, brightness:0.4,
+          note:(ctx)=>`It's ${fmtClockShort(ctx.nowMins)} — late reading window. Warmer, dimmer light to avoid signalling daytime to the body.` } },
+      { id:'paper.eyewear-reading', label:'Eyewear: reading or progressive lenses',
+        cond:(ctx)=>ctx.eyewear==='reading'||ctx.eyewear==='bifocal-progressive',
+        variant:{ key:'reading-lens-diffused', label:'Reading-lens diffused boost', warmth:0.55, brightness:0.85,
+          note:()=>'Reading/progressive lenses narrow the focal range up close — brightness raised and diffused to reduce squinting at lens periphery.' } },
+      { id:'paper.longsession', label:'Session ≥ 45 min (fatigue compensation)',
+        cond:(ctx)=>ctx.sessionMins>=45,
+        variant:{ key:'fatigue-brighten', label:'Fatigue compensation', warmth:0.55, brightness:0.9,
+          note:(ctx)=>`${Math.round(ctx.sessionMins)} min of continuous paper-mode reading. Nudging brightness up to counter visual fatigue.` } },
+      { id:'paper.dimroom', label:'Ambient light below 60 lux',
+        cond:(ctx)=>ctx.ambientLux<60,
+        variant:{ key:'dim-room-paper', label:'Dim-room paper boost', warmth:0.6, brightness:0.95,
+          note:(ctx)=>`Room ambient very low (${ctx.ambientLux} lux). Boosted toward max brightness for legible print contrast.` } },
+      { id:'paper.daytime', label:'Local time 8:00–18:00',
+        cond:(ctx)=>ctx.hour>=8&&ctx.hour<18,
+        variant:{ key:'daytime-crisp', label:'Daytime crisp read', warmth:0.25, brightness:0.7,
+          note:()=>'Daytime hours: brighter, cooler-leaning warm light for crisp contrast on paper.' } },
+      { id:'paper.default', label:'Default',
+        cond:()=>true,
+        variant:{ key:'standard-paper', label:'Standard paper-safe', warmth:0.65, brightness:0.7,
+          note:()=>'Baseline paper-mode tuning: warm, even, low-glare light for reading and handwriting.' } }
+    ]
+  };
+
+  function evaluateRules(mode,ctx){
+    const list=RULES[mode];
+    for(let i=0;i<list.length;i++) if(list[i].cond(ctx)) return {rule:list[i],all:list};
+    return {rule:list[list.length-1],all:list};
+  }
+
+  // ── GLOW HELPERS ──
+  function glowGradient(variant,on){
+    if(!on) return 'transparent';
+    const w=variant.warmth,cool=[110,168,255],warm=[255,180,84];
+    const r=Math.round(cool[0]+(warm[0]-cool[0])*w),g=Math.round(cool[1]+(warm[1]-cool[1])*w),b=Math.round(cool[2]+(warm[2]-cool[2])*w);
+    const a=0.18+variant.brightness*0.32;
+    return `radial-gradient(ellipse 60% 60% at 50% 30%, rgba(${r},${g},${b},${a}) 0%, rgba(${r},${g},${b},0) 70%)`;
+  }
+  function bulbColor(variant,on){
+    if(!on) return '#3a4150';
+    const w=variant.warmth,cool=[180,210,255],warm=[255,205,140];
+    const r=Math.round(cool[0]+(warm[0]-cool[0])*w),g=Math.round(cool[1]+(warm[1]-cool[1])*w),b=Math.round(cool[2]+(warm[2]-cool[2])*w);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ── STATE ──
+  function defaultProfile(name,age,role,eyewear){
+    return { id:uid(),name,age,role,eyewear, breakIntervalMins:30, breakBehavior:'blink', theme:'auto', autoDetect:false, blocks:[], acceptedSuggestions:[] };
+  }
+  const state={
+    simMinutes:9*60+15, speedIdx:1, speedVals:[1/60,1,10],
+    ambientLux:220, lampOn:true, mode:'screen',
+    sessionStart:0, lastBreakAt:0, lastChangeSource:'app',
+    overrides:{}, linked:false, prevBlockId:null,
+    blinkFiredForFiringState:false, sensorSignal:'screen-facing',
+    breakState:'idle', cooldownUntil:null, manualHoldUntil:null
+  };
+  // screenBlueLux is read internally by the lamp's spectrometer sensor — not user-settable
+  const SCREEN_BLUE_LUX = 'medium';
+  const profile=defaultProfile('Nicolas',24,'student','none');
+  profile.blocks=[
+    {id:1,start:9*60,end:11*60,mode:'screen',label:'Deep work — screen'},
+    {id:2,start:11*60,end:11*60+30,mode:'paper',label:'Notes review'},
+    {id:3,start:14*60,end:15*60,mode:'paper',label:'Reading block'},
+    {id:4,start:15*60,end:17*60,mode:'screen',label:'Afternoon screen work'},
+    {id:5,start:19*60+30,end:20*60+30,mode:'paper',label:'Evening reading'}
+  ];
+  function activeProfile(){ return profile; }
+  function currentBlock(){
+    const p=activeProfile();
+    for(const b of p.blocks) if(state.simMinutes>=b.start&&state.simMinutes<b.end) return b;
+    return null;
+  }
+  function isScreenLikeMode(m){ return m==='screen'||m==='green'; }
+  function isEveningWindow(hour){ return hour>=18||hour<5; }
+
+  function effectiveSensorMode(){
+    if(state.sensorSignal==='paper-facing') return 'paper';
+    if(state.sensorSignal==='screen-facing') return 'screen';
+    return null;
+  }
+
+  // superSensorDecision now incorporates screenBlueLux
+  function superSensorDecision(){
+    const base=effectiveSensorMode();
+    if(base!=='screen') return base;
+    const hour=Math.floor(state.simMinutes/60);
+    // Screen blue-light level is read by the lamp's internal spectrometer (SCREEN_BLUE_LUX constant here)
+    if(SCREEN_BLUE_LUX==='high') return 'green';
+    if(SCREEN_BLUE_LUX==='low') return 'screen';
+    return isEveningWindow(hour)?'green':'screen';
+  }
+
+  function setLampMode(newMode,source){
+    if(newMode===state.mode) return;
+    state.mode=newMode; state.sessionStart=state.simMinutes; state.lastChangeSource=source;
+    if(isScreenLikeMode(newMode)){ state.lastBreakAt=state.simMinutes; state.breakState='idle'; }
+    if(source==='button'||source==='app') state.manualHoldUntil=state.simMinutes+3;
+    const cb=currentBlock();
+    if(cb&&cb.mode!==newMode) state.overrides[cb.id]=true;
+    else if(cb&&cb.mode===newMode&&state.overrides[cb.id]) state.overrides[cb.id]=false;
+  }
+  function appSetMode(m){ if(!state.lampOn) return; setLampMode(m,'app'); render(); }
+  function addBlock(){
+    const p=activeProfile();
+    const s=document.getElementById('newStart').value,e=document.getElementById('newEnd').value;
+    const mode=document.getElementById('newMode').value,label=document.getElementById('newLabel').value;
+    if(!s||!e) return;
+    const[sh,sm]=s.split(':').map(Number),[eh,em]=e.split(':').map(Number);
+    const startM=sh*60+sm,endM=eh*60+em;
+    if(endM<=startM) return;
+    p.blocks.push({id:Date.now(),start:startM,end:endM,mode,label:label||(mode==='screen'?'Screen block':mode==='paper'?'Paper block':'Blue light counter block')});
+    p.blocks.sort((a,b)=>a.start-b.start);
+    document.getElementById('newLabel').value='';
+    render();
+  }
+  function removeBlock(id){ const p=activeProfile(); p.blocks=p.blocks.filter(b=>b.id!==id); delete state.overrides[id]; render(); }
+
+  function schedulerCheck(){
+    const p=activeProfile(),cb=currentBlock();
+    if(cb&&cb.id!==state.prevBlockId){
+      state.prevBlockId=cb.id;
+      if(!state.overrides[cb.id]&&state.mode!==cb.mode) setLampMode(cb.mode,'schedule');
+    }
+    if(!cb) state.prevBlockId=null;
+    if(p.autoDetect&&state.lampOn){
+      const sensorMode=superSensorDecision();
+      const overriddenNow=cb?!!state.overrides[cb.id]:false;
+      const inManualHold=state.manualHoldUntil!==null&&state.simMinutes<state.manualHoldUntil&&state.simMinutes>=state.manualHoldUntil-23*60;
+      if(sensorMode&&!overriddenNow&&!inManualHold&&sensorMode!==state.mode) setLampMode(sensorMode,'super-sensor');
+    }
+  }
+
+  function minsSinceLastBreak(){ return((state.simMinutes-state.lastBreakAt)+24*60)%(24*60); }
+  function breakStateCheck(ctx,p){
+    if(!state.lampOn||!isScreenLikeMode(state.mode)){
+      if(state.breakState!=='idle'&&!isScreenLikeMode(state.mode)){ state.breakState='idle'; state.cooldownUntil=null; }
+      return;
+    }
+    if(state.breakState==='idle'&&minsSinceLastBreak()>=p.breakIntervalMins) state.breakState='firing';
+    if(state.breakState==='cooldown'&&state.cooldownUntil!==null){
+      if(state.simMinutes>=state.cooldownUntil||state.simMinutes<state.cooldownUntil-23*60){ state.breakState='idle'; state.cooldownUntil=null; }
+    }
+  }
+  function acknowledgeBreak(){ state.breakState='cooldown'; state.cooldownUntil=state.simMinutes+5; state.lastBreakAt=state.simMinutes; render(); }
+
+  // ── RENDER ──
+  function render(){
+    const p=activeProfile(),cb=currentBlock();
+    const sessionMins=state.lampOn?Math.max(0,((state.simMinutes-state.sessionStart)+24*60)%(24*60)):0;
+    const ctx={
+      hour:Math.floor(state.simMinutes/60),nowMins:state.simMinutes,sessionMins,
+      minsSinceLastBreak:minsSinceLastBreak(),breakIntervalMins:p.breakIntervalMins,
+      breakBehavior:p.breakBehavior,breakState:state.breakState,
+      ambientLux:state.ambientLux,eyewear:p.eyewear,age:p.age,role:p.role,
+      autoDetect:p.autoDetect,sensorSignal:state.sensorSignal
+    };
+    breakStateCheck(ctx,p); ctx.breakState=state.breakState;
+    const evalResult=evaluateRules(state.mode,ctx);
+    const variant=evalResult.rule.variant;
+    let effectiveVariant=variant;
+    if(state.breakState==='firing'&&(p.breakBehavior==='dim'||p.breakBehavior==='both'))
+      effectiveVariant=Object.assign({},variant,{brightness:Math.min(variant.brightness,0.25)});
+
+    // blink flash
+    const shouldBlink=state.lampOn&&isScreenLikeMode(state.mode)&&state.breakState==='firing';
+    if(shouldBlink&&!state.blinkFiredForFiringState){
+      state.blinkFiredForFiringState=true;
+      const flash=document.getElementById('blinkFlash');
+      flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on');
+      setTimeout(()=>flash.classList.remove('on'),1800);
+    }
+    if(state.breakState!=='firing') state.blinkFiredForFiringState=false;
+
+    // header
+    document.getElementById('headerAvatar').textContent=p.name.charAt(0).toUpperCase();
+    document.getElementById('headerProfileName').textContent=p.name;
+    document.getElementById('clockDisplay').textContent=fmtClock(state.simMinutes);
+    const unlinkBtn=document.getElementById('btnUnlink');
+    unlinkBtn.textContent=state.linked?'Unlink lamp':'Lamp not linked';
+    unlinkBtn.className='unlink-btn'+(state.linked?' linked':'');
+
+    // stage readouts
+    const modeColorVar=state.mode==='screen'?'--accent-screen':state.mode==='paper'?'--accent-paper':'--accent-green';
+    const modeLabel=state.mode==='screen'?'Screen mode':state.mode==='paper'?'Paper mode':'Blue light counter';
+    document.getElementById('lampModeDot').style.background=state.lampOn?`var(${modeColorVar})`:'var(--ink-faint)';
+    document.getElementById('lampModeText').textContent=state.lampOn?modeLabel:'Off';
+    document.getElementById('lampSubText').innerHTML=state.lampOn?`variant: <b>${effectiveVariant.label}</b><br/>session: ${Math.round(sessionMins)} min · via ${state.lastChangeSource}`:'';
+    const overriddenNow=cb?!!state.overrides[cb.id]:false;
+    let pillsHtml='';
+    if(state.lampOn&&state.breakState==='firing') pillsHtml+='<span class="tag-pill blink">● break reminder firing</span>';
+    if(state.lampOn&&state.breakState==='cooldown') pillsHtml+='<span class="tag-pill cooldown">cooling down</span>';
+    if(state.lampOn&&overriddenNow) pillsHtml+='<span class="tag-pill override">⚠ overriding schedule</span>';
+    if(state.lampOn&&p.autoDetect) pillsHtml+='<span class="tag-pill sensor">◆ auto on</span>';
+    document.getElementById('tagPills').innerHTML=pillsHtml;
+    document.getElementById('scheduledLabel').textContent=cb?cb.label:'No block now';
+    document.getElementById('scheduledLabel').style.color=cb?'':'var(--ink-faint)';
+    document.getElementById('scheduledSub').textContent=cb?`${fmtClockShort(cb.start)}–${fmtClockShort(cb.end)} · planned: ${cb.mode===`green`?'blue light counter':cb.mode}`:'';
+
+    // lamp SVG
+    document.getElementById('glowPool').style.background=glowGradient(effectiveVariant,state.lampOn);
+    const bulb=bulbColor(effectiveVariant,state.lampOn);
+    const glowOpacity=state.lampOn?(0.35+effectiveVariant.brightness*0.5):0;
+    document.getElementById('bulbGlowStop1').setAttribute('stop-color',bulb);
+    document.getElementById('bulbGlowStop1').setAttribute('stop-opacity',glowOpacity);
+    document.getElementById('bulbEllipse').setAttribute('fill',bulb);
+    document.getElementById('bulbEllipse').setAttribute('opacity',state.lampOn?1:0.35);
+    document.getElementById('lampLed').setAttribute('fill',state.lampOn?bulb:'#4a5260');
+
+    // automatic block
+    document.getElementById('autoDetectToggle').checked=p.autoDetect;
+    const autoBox=document.getElementById('autoStatusBox');
+    if(state.lampOn&&p.autoDetect){
+      autoBox.classList.add('visible');
+      const decision=superSensorDecision();
+      const dLabel=decision==='green'?'Blue light counter':decision==='paper'?'Paper':'Screen';
+      const badge=document.getElementById('autoModeBadge');
+      badge.textContent=dLabel;
+      badge.className='auto-status-mode-badge '+(decision||'screen');
+      const hour=ctx.hour;
+      let rationale='';
+      if(decision==='green'&&SCREEN_BLUE_LUX==='high'){
+        rationale=`<b>High screen blue-light output detected by sensor</b> — Blue light counter mode active regardless of time of day. Red/amber-enriched counter-balance at ${state.ambientLux} lux ambient.`;
+      } else if(decision==='screen'&&SCREEN_BLUE_LUX==='low'&&isEveningWindow(hour)){
+        rationale=`<b>Low screen output detected by sensor — evening window active but counter-balance not needed.</b> Screen mode maintained.`;
+      } else if(decision==='green'){
+        rationale=`<b>Evening window detected (${fmtClockShort(state.simMinutes)})</b> — screen blue-light output warrants counter-balancing. The lamp shifts to Blue light counter mode. Ambient counter-balance active at ${state.ambientLux} lux.`;
+      } else if(decision==='paper'){
+        rationale=`<b>Paper context detected</b> — sensor reads desk/paper orientation. Switching to Paper mode. Ambient: ${state.ambientLux} lux, session: ${Math.round(sessionMins)} min.`;
+      } else {
+        rationale=`<b>Screen context, daytime (${fmtClockShort(state.simMinutes)})</b> — facing a screen outside the counter-balance window. Screen mode active with standard tuning. Ambient: ${state.ambientLux} lux.`;
+      }
+      document.getElementById('autoRationale').innerHTML=rationale;
+    } else {
+      autoBox.classList.remove('visible');
+    }
+
+    // break banner
+    const breakBanner=document.getElementById('breakBanner');
+    if(state.lampOn&&state.breakState==='firing'){
+      breakBanner.style.display='flex'; breakBanner.className='break-banner firing';
+      document.getElementById('breakBannerText').textContent='Break reminder firing';
+      document.getElementById('breakBannerSub').textContent=`${Math.round(minsSinceLastBreak())} min since your last pause, past the ${p.breakIntervalMins}-min recurring interval.`;
+      document.getElementById('btnPauseBreak').textContent='Pause / acknowledge';
+    } else if(state.lampOn&&state.breakState==='cooldown'){
+      breakBanner.style.display='flex'; breakBanner.className='break-banner cooldown';
+      document.getElementById('breakBannerText').textContent='Reminder dismissed — cooling down';
+      document.getElementById('breakBannerSub').textContent='Session timer reset. Tracking resumes shortly.';
+      document.getElementById('btnPauseBreak').textContent='OK';
+    } else { breakBanner.style.display='none'; }
+
+    // mode cards
+    document.getElementById('modeCardScreen').className='mode-card screen'+(state.lampOn&&state.mode==='screen'?' active':'');
+    document.getElementById('modeCardPaper').className='mode-card paper'+(state.lampOn&&state.mode==='paper'?' active':'');
+    document.getElementById('modeCardGreen').className='mode-card green'+(state.lampOn&&state.mode==='green'?' active':'');
+    const mcVS=document.getElementById('mcVariantScreen'),mcVP=document.getElementById('mcVariantPaper'),mcVG=document.getElementById('mcVariantGreen');
+    if(state.lampOn&&state.mode==='screen'){mcVS.style.display='block';mcVS.querySelector('b').textContent=effectiveVariant.label;}else mcVS.style.display='none';
+    if(state.lampOn&&state.mode==='paper'){mcVP.style.display='block';mcVP.querySelector('b').textContent=effectiveVariant.label;}else mcVP.style.display='none';
+    if(state.lampOn&&state.mode==='green'){mcVG.style.display='block';mcVG.querySelector('b').textContent=effectiveVariant.label;}else mcVG.style.display='none';
+
+    // rule trace
+    const modeNameForTrace=state.mode==='screen'?'Screen':state.mode==='paper'?'Paper':'Blue light counter';
+    document.getElementById('ruleTraceLabel').textContent=modeNameForTrace+' mode rules · first match wins';
+    const ruleListEl=document.getElementById('ruleList');
+    ruleListEl.innerHTML='';
+    evalResult.all.forEach(r=>{
+      const div=document.createElement('div');
+      div.className='vt-rule'+(r.id===evalResult.rule.id?' matched':'');
+      div.innerHTML=`<span class="vr-arrow">${r.id===evalResult.rule.id?'✓':'·'}</span><span>${r.label}</span>`;
+      ruleListEl.appendChild(div);
+    });
+    document.getElementById('variantNote').textContent=typeof variant.note==='function'?variant.note(ctx):'';
+    document.getElementById('statSession').textContent=Math.round(sessionMins);
+    document.getElementById('statLux').textContent=state.ambientLux;
+    document.getElementById('statTime').textContent=fmtClockShort(state.simMinutes);
+    document.getElementById('luxValue').textContent=state.ambientLux;
+
+    renderTimeline(cb,p);
+    renderBlockList(cb,p);
+    renderProfile(p);
+  }
+
+  function renderTimeline(cb,p){
+    const hoursEl=document.getElementById('tlHours');
+    hoursEl.innerHTML='';
+    for(let h=7;h<=23;h+=2){
+      const pct=(h*60/(24*60))*100;
+      const mark=document.createElement('div'); mark.className='tl-hour-mark'; mark.style.left=pct+'%'; hoursEl.appendChild(mark);
+      const label=document.createElement('div'); label.className='tl-hour-label'; label.style.left=pct+'%'; label.textContent=pad(h)+':00'; hoursEl.appendChild(label);
+    }
+    const row=document.getElementById('tlBlocksRow'); row.innerHTML='';
+    p.blocks.forEach(b=>{
+      const left=(b.start/(24*60))*100,width=((b.end-b.start)/(24*60))*100;
+      const div=document.createElement('div');
+      div.className='tl-block '+b.mode; div.style.left='calc('+left+'% + 1px)'; div.style.width='calc('+width+'% - 2px)';
+      div.title=b.label; div.textContent=b.label;
+      const del=document.createElement('span'); del.className='tl-del'; del.textContent='✕';
+      del.addEventListener('click',(e)=>{e.stopPropagation();removeBlock(b.id);}); div.appendChild(del); row.appendChild(div);
+    });
+    const nowLine=document.createElement('div'); nowLine.className='tl-now-line'; nowLine.style.left=((state.simMinutes)/(24*60))*100+'%';
+    const tag=document.createElement('div'); tag.className='tl-now-tag'; tag.textContent=fmtClockShort(state.simMinutes);
+    nowLine.appendChild(tag); row.appendChild(nowLine);
+  }
+
+  function renderBlockList(cb,p){
+    const listEl=document.getElementById('blockList'); listEl.innerHTML='';
+    if(p.blocks.length===0){ const empty=document.createElement('div'); empty.className='empty-note'; empty.textContent='No blocks yet — add one above.'; listEl.appendChild(empty); return; }
+    p.blocks.forEach(b=>{
+      const isNow=cb&&cb.id===b.id,overridden=!!state.overrides[b.id];
+      const row=document.createElement('div');
+      row.className='block-row'+(isNow?' is-now':'')+(overridden?' is-overridden':'');
+      const modeDisplay=b.mode==='green'?'blue light counter':b.mode;
+      row.innerHTML=`<span class="br-dot" style="background:${b.mode==='screen'?'var(--accent-screen)':b.mode==='paper'?'var(--accent-paper)':'var(--accent-green)'}"></span><span class="br-time">${fmtClockShort(b.start)}–${fmtClockShort(b.end)}</span><span class="br-label">${b.label}${isNow?'<span style="color:var(--accent-screen);margin-left:8px;font-size:11.5px;">● now</span>':''}${overridden?`<span style="color:var(--accent-paper);margin-left:8px;font-size:11.5px;">overridden → ${state.mode==='green'?'blue light counter':state.mode}</span>`:''}</span>`;
+      const del=document.createElement('button'); del.className='br-del'; del.textContent='✕';
+      del.addEventListener('click',()=>removeBlock(b.id)); row.appendChild(del); listEl.appendChild(row);
+    });
+  }
+
+  function renderProfile(activeP){
+    const nameInput=document.getElementById('profileName');
+    if(document.activeElement!==nameInput) nameInput.value=activeP.name;
+    const ageInput=document.getElementById('profileAge');
+    if(document.activeElement!==ageInput) ageInput.value=activeP.age;
+    document.getElementById('profileRole').value=activeP.role;
+    document.getElementById('profileEyewear').value=activeP.eyewear;
+    const threshInput=document.getElementById('breakInterval');
+    if(document.activeElement!==threshInput) threshInput.value=activeP.breakIntervalMins;
+    document.querySelectorAll('#themePills .toggle-pill').forEach(pill=>pill.classList.toggle('active',pill.dataset.theme===activeP.theme));
+    document.getElementById('avatarLetter').textContent=activeP.name.charAt(0).toUpperCase();
+  }
+
+  // ── EVENT WIRING ──
+  document.getElementById('luxSlider').addEventListener('input',(e)=>{ state.ambientLux=Number(e.target.value); render(); });
+  document.getElementById('modeCardScreen').addEventListener('click',()=>appSetMode('screen'));
+  document.getElementById('modeCardPaper').addEventListener('click',()=>appSetMode('paper'));
+  document.getElementById('modeCardGreen').addEventListener('click',()=>appSetMode('green'));
+  document.getElementById('autoDetectToggle').addEventListener('change',(e)=>{ activeProfile().autoDetect=e.target.checked; render(); });
+  document.getElementById('btnPauseBreak').addEventListener('click',acknowledgeBreak);
+  document.getElementById('btnAddBlock').addEventListener('click',addBlock);
+  document.getElementById('btnUnlink').addEventListener('click',()=>{ state.linked=!state.linked; render(); });
+  document.getElementById('profileName').addEventListener('input',(e)=>{ activeProfile().name=e.target.value; render(); });
+  document.getElementById('profileAge').addEventListener('input',(e)=>{ activeProfile().age=Number(e.target.value)||0; render(); });
+  document.getElementById('profileRole').addEventListener('change',(e)=>{ activeProfile().role=e.target.value; render(); });
+  document.getElementById('profileEyewear').addEventListener('change',(e)=>{ activeProfile().eyewear=e.target.value; render(); });
+  document.getElementById('breakInterval').addEventListener('input',(e)=>{ activeProfile().breakIntervalMins=Number(e.target.value)||30; render(); });
+  document.querySelectorAll('#themePills .toggle-pill').forEach(pill=>pill.addEventListener('click',()=>{ activeProfile().theme=pill.dataset.theme; render(); }));
+  document.querySelectorAll('#speedBtns button').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('#speedBtns button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active'); state.speedIdx=Number(btn.dataset.speedIdx);
+    });
+  });
+
+  // ── MAIN LOOP ──
+  setInterval(()=>{
+    state.simMinutes=(state.simMinutes+state.speedVals[state.speedIdx])%(24*60);
+    schedulerCheck(); render();
+  },1000);
+
+  render();
+})();
+</script>
+</body>
+</html>
