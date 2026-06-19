@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SmartLamp — Companion App v8</title>
+<style>
+  :root{
+    --bg:#0b0e13; --panel:#1b212b; --panel2:#222a36;
+    --line:#2d3644; --ink:#eef1f6; --ink-dim:#9aa5b4; --ink-faint:#5d6776;
+    --blue:#6ea8ff; --amber:#ffb454; --green:#5fd98a;
+    --warn:#ff6b6b; --good:#5fd3a0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  ::selection{background:#3a4a63;}
+
+  /* ── LAYOUT ── */
+  .wrap{max-width:680px;margin:0 auto;padding:36px 20px 60px;}
+
+  /* ── HEADER ── */
+  .header{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:32px;gap:12px;flex-wrap:wrap;}
+  .header-brand h1{font-family:Georgia,serif;font-size:clamp(22px,4vw,30px);
+    font-weight:700;margin:0;letter-spacing:-0.01em;}
+  .header-brand .tag{font-size:11px;color:var(--ink-faint);text-transform:uppercase;
+    letter-spacing:0.09em;margin-top:2px;}
+  .link-btn{display:flex;align-items:center;gap:8px;padding:8px 18px;
+    border-radius:100px;font-size:13px;font-weight:600;cursor:pointer;
+    transition:all .15s;border:1.5px solid;}
+  .link-btn.unlinked{background:none;border-color:var(--line);color:var(--ink-faint);}
+  .link-btn.unlinked:hover{border-color:var(--blue);color:var(--blue);}
+  .link-btn.linked{background:rgba(95,211,160,0.1);border-color:rgba(95,211,160,0.45);color:var(--good);}
+  .link-btn .dot{width:7px;height:7px;border-radius:50%;}
+  .link-btn.linked .dot{background:var(--good);box-shadow:0 0 6px var(--good);}
+  .link-btn.unlinked .dot{background:var(--ink-faint);}
+
+  /* ── BLOCK SHELL ── */
+  .block{background:var(--panel);border:1px solid var(--line);border-radius:20px;
+    margin-bottom:16px;overflow:hidden;}
+  .block-body{padding:22px 24px 26px;}
+  .block-title{font-family:Georgia,serif;font-size:19px;font-weight:700;
+    margin:0 0 18px;}
+
+  /* ── BLOCK 1: LAMP VISUAL ── */
+  .stage{
+    position:relative;
+    background:radial-gradient(ellipse 120% 100% at 50% 0%,#1b2230 0%,#14181f 55%,var(--bg) 100%);
+    min-height:320px;display:flex;flex-direction:column;
+    align-items:center;justify-content:flex-end;
+    padding:36px 20px 24px;overflow:hidden;
+  }
+  .stage::before{content:'';position:absolute;inset:0;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:28px 28px;opacity:0.07;pointer-events:none;}
+  @media(max-width:700px){
+    .stage{padding-top:16px;}
+    .readout-row{position:static!important;flex-direction:column!important;margin-bottom:14px;}
+    .readout-card{min-width:0!important;width:100%!important;}
+    .lamp-scene{transform:scale(0.8);transform-origin:bottom center;margin-top:-10px;}
+  }
+  .readout-row{position:absolute;top:18px;left:20px;right:20px;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    z-index:4;flex-wrap:wrap;gap:10px;}
+  .readout-card{background:rgba(11,14,19,0.75);border:1px solid var(--line);
+    border-radius:12px;padding:12px 16px;backdrop-filter:blur(6px);min-width:185px;}
+  .rc-label{font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:5px;}
+  .rc-value{font-family:Georgia,serif;font-size:18px;font-weight:700;
+    display:flex;align-items:center;gap:7px;}
+  .mode-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .rc-sub{font-size:11px;color:var(--ink-dim);margin-top:3px;line-height:1.4;}
+  .lamp-scene{position:relative;display:flex;flex-direction:column;
+    align-items:center;z-index:2;}
+  .glow-pool{position:absolute;width:480px;height:260px;bottom:-36px;left:50%;
+    transform:translateX(-50%);border-radius:50%;filter:blur(8px);
+    transition:background 900ms ease;z-index:0;pointer-events:none;}
+  .desk-surface{width:480px;height:13px;background:linear-gradient(180deg,#2a3140,#171b22);
+    border-radius:3px;margin-top:5px;box-shadow:0 5px 20px rgba(0,0,0,.5);}
+  .lamp-svg-wrap{position:relative;z-index:3;
+    filter:drop-shadow(0 16px 22px rgba(0,0,0,.45));}
+  .blink-flash{position:absolute;inset:-55px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.9) 0%,transparent 70%);
+    opacity:0;pointer-events:none;}
+  .blink-flash.on{animation:bpulse .55s ease-in-out 3;}
+  @keyframes bpulse{0%{opacity:0}25%{opacity:.85}50%{opacity:0}75%{opacity:.6}100%{opacity:0}}
+
+  /* ── BLOCK 2: LAMP (power + status) ── */
+  .power-row{display:flex;align-items:center;justify-content:space-between;
+    gap:16px;margin-bottom:20px;}
+  .power-label{font-size:15px;font-weight:600;color:var(--ink);}
+  .power-sub{font-size:12px;color:var(--ink-faint);margin-top:2px;}
+  /* large power switch */
+  .switch{position:relative;display:inline-block;width:58px;height:32px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;cursor:pointer;inset:0;
+    background:var(--line);border-radius:100px;transition:.2s;}
+  .switch .slider::before{position:absolute;content:"";height:24px;width:24px;
+    left:4px;bottom:4px;background:var(--ink-dim);border-radius:50%;transition:.2s;}
+  .switch input:checked+.slider{background:var(--green);}
+  .switch input:checked+.slider::before{transform:translateX(26px);background:#0a1a0e;}
+
+  .status-box{background:var(--bg);border:1px solid var(--line);
+    border-radius:14px;padding:16px 18px;}
+  .status-off{font-size:13px;color:var(--ink-faint);font-style:italic;}
+  .status-on{font-size:13.5px;color:var(--ink-dim);line-height:1.6;}
+  .status-on b{color:var(--ink);}
+  .status-mode-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .status-badge{display:inline-flex;align-items:center;gap:6px;
+    padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700;border:1px solid;}
+  .status-badge.green{background:rgba(95,217,138,.14);color:var(--green);border-color:rgba(95,217,138,.35);}
+  .status-badge.paper{background:rgba(255,180,84,.14);color:var(--amber);border-color:rgba(255,180,84,.35);}
+
+  /* ── BLOCK 3: TIME ── */
+  .field-group{display:flex;flex-direction:column;gap:18px;}
+  .field-row{display:flex;flex-direction:column;gap:6px;}
+  .field-label{font-size:11px;font-weight:600;color:var(--ink-faint);
+    text-transform:uppercase;letter-spacing:0.08em;}
+  .field-note{font-size:11.5px;color:var(--ink-faint);margin-top:4px;line-height:1.4;}
+  input[type="time"],input[type="number"]{
+    background:var(--bg);border:1px solid var(--line);color:var(--ink);
+    padding:10px 14px;border-radius:10px;font-size:14px;font-family:inherit;width:100%;}
+  input[type="time"]:focus,input[type="number"]:focus{outline:none;border-color:var(--blue);}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .toggle-label-col{flex:1;}
+  .toggle-name{font-size:14px;font-weight:600;color:var(--ink);}
+  .interval-row{display:flex;align-items:center;gap:10px;margin-top:12px;
+    padding:12px 14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;}
+  .interval-row label{font-size:12.5px;color:var(--ink-dim);white-space:nowrap;}
+  .interval-row input{width:70px;text-align:center;}
+  .interval-row span{font-size:12.5px;color:var(--ink-dim);}
+
+  /* ── BLOCK 4: PROFILE ── */
+  .profile-fields{display:flex;flex-direction:column;gap:18px;}
+  select{width:100%;background:var(--bg);border:1px solid var(--line);
+    color:var(--ink);padding:10px 14px;border-radius:10px;font-size:14px;
+    font-family:inherit;cursor:pointer;}
+  select:focus{outline:none;border-color:var(--blue);}
+  .algo-note{margin-top:20px;font-size:12px;color:var(--ink-faint);
+    line-height:1.55;padding:12px 14px;background:var(--bg);
+    border:1px solid var(--line);border-radius:10px;}
+  .algo-note b{color:var(--ink-dim);}
+
+  /* ── DEMO CONTROLS ── */
+  .demo-section{margin-top:40px;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .demo-header{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 18px;cursor:pointer;background:var(--panel);user-select:none;}
+  .demo-header-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.1em;
+    color:var(--ink-faint);font-weight:600;}
+  .demo-header-note{font-size:10.5px;color:var(--ink-faint);font-style:italic;}
+  .demo-chevron{font-size:11px;color:var(--ink-faint);transition:transform .2s;}
+  .demo-chevron.open{transform:rotate(180deg);}
+  .demo-body{padding:16px 18px 18px;background:var(--bg);display:none;}
+  .demo-body.open{display:block;}
+  .demo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .demo-label{font-size:10.5px;color:var(--ink-faint);text-transform:uppercase;
+    letter-spacing:0.08em;width:100%;}
+  .demo-btn{background:none;border:1px solid var(--line);color:var(--ink-dim);
+    font-size:12px;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .12s;}
+  .demo-btn:hover{border-color:var(--blue);color:var(--blue);}
+  .demo-btn.active{background:var(--blue);color:#0b1a30;border-color:var(--blue);font-weight:600;}
+  .demo-btn.paper-active{background:var(--amber);color:#1a0e00;border-color:var(--amber);}
+  .clock-display{font-family:Georgia,serif;font-size:20px;font-weight:700;
+    color:var(--ink);margin-right:6px;}
+  .speed-btns{display:flex;gap:6px;}
+  .speed-btn{background:none;border:1px solid var(--line);color:var(--ink-faint);
+    font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;}
+  .speed-btn.active{background:var(--blue);color:#0b1a30;border-color:var(--blue);font-weight:600;}
+
+  input[type=range]{accent-color:var(--green);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-brand">
+      <h1 style="font-family:Georgia,serif;">SmartLamp</h1>
+      <div class="tag">Companion app — v8</div>
+    </div>
+    <button class="link-btn unlinked" id="linkBtn">
+      <span class="dot"></span>
+      <span id="linkBtnText">Link lamp</span>
+    </button>
+  </div>
+
+  <!-- BLOCK 1: NOW — LAMP VISUAL -->
+  <div class="block">
+    <div class="stage">
+      <div class="readout-row">
+        <div class="readout-card">
+          <div class="rc-label">Lamp state</div>
+          <div class="rc-value">
+            <span class="mode-dot" id="modeDot"></span>
+            <span id="modeText">Off</span>
+          </div>
+          <div class="rc-sub" id="modeSub"></div>
+        </div>
+        <div class="readout-card">
+          <div class="rc-label">Sensor reading</div>
+          <div class="rc-value" id="sensorReadout" style="font-size:15px;color:var(--ink-dim);">—</div>
+          <div class="rc-sub" id="sensorSub"></div>
+        </div>
+      </div>
+      <div class="lamp-scene">
+        <div class="glow-pool" id="glowPool"></div>
+        <div style="position:relative;">
+          <div class="blink-flash" id="blinkFlash"></div>
+          <svg width="190" height="230" viewBox="0 0 200 240" class="lamp-svg-wrap">
+            <defs>
+              <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+                <stop id="gs1" offset="0%" stop-color="#aeccff" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="#aeccff" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="arm" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3b4452"/>
+                <stop offset="100%" stop-color="#222834"/>
+              </linearGradient>
+            </defs>
+            <ellipse cx="100" cy="118" r="85" fill="url(#bg)"/>
+            <rect x="55" y="206" width="90" height="14" rx="7" fill="#262d38" stroke="#384151"/>
+            <rect x="90" y="150" width="20" height="58" rx="6" fill="url(#arm)"/>
+            <path d="M100 150 L70 95" stroke="url(#arm)" stroke-width="11" stroke-linecap="round"/>
+            <circle cx="100" cy="150" r="9" fill="#414b5a"/>
+            <circle cx="70" cy="95" r="8" fill="#414b5a"/>
+            <path d="M36 100 L104 88 L110 108 L40 124 Z" fill="#2a313c" stroke="#3a4452" stroke-width="1.5"/>
+            <ellipse id="bulb" cx="42" cy="112" rx="9" ry="13" fill="#aeccff"/>
+            <ellipse cx="42" cy="112" rx="9" ry="13" fill="none" stroke="#1a1f27" stroke-width="2"/>
+            <circle id="led" cx="100" cy="150" r="3" fill="#aeccff"/>
+          </svg>
+        </div>
+        <div class="desk-surface"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCK 2: LAMP (power + status) -->
+  <div class="block">
+    <div class="block-body">
+      <div class="power-row">
+        <div>
+          <div class="power-label">Lamp</div>
+          <div class="power-sub">Algorithm runs automatically when on</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="powerToggle"/>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="status-box">
+        <div id="statusOff" class="status-off">Lamp is off — toggle above to start.</div>
+        <div id="statusOn" style="display:none;">
+          <div class="status-mode-row">
+            <span class="status-badge" id="statusBadge">—</span>
+          </div>
+          <div class="status-on" id="statusText"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCK 3: TIME -->
+  <div class="block">
+    <div class="block-body">
+      <div class="block-title">Time</div>
+      <div class="field-group">
+        <div class="field-row">
+          <div class="field-label">Shift starts at</div>
+          <input type="time" id="shiftStart" value="09:00"/>
+          <div class="field-note">Used by the algorithm to track session duration and apply circadian adjustments through the day.</div>
+        </div>
+        <div>
+          <div class="toggle-row">
+            <div class="toggle-label-col">
+              <div class="toggle-name">Pause reminder</div>
+              <div class="field-note" style="margin-top:3px;">The lamp blinks to prompt a break. Resets silently.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="pauseToggle"/>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="interval-row" id="intervalRow" style="display:none;">
+            <label for="pauseInterval">Every</label>
+            <input type="number" id="pauseInterval" value="30" min="5" max="120" style="width:70px;text-align:center;"/>
+            <span>minutes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOCK 4: PROFILE -->
+  <div class="block">
+    <div class="block-body">
+      <div class="block-title">Profile</div>
+      <div class="profile-fields">
+        <div class="field-row">
+          <div class="field-label">Age</div>
+          <input type="number" id="profileAge" value="24" min="10" max="99"/>
+        </div>
+        <div class="field-row">
+          <div class="field-label">Corrective eyewear</div>
+          <select id="profileEyewear">
+            <option value="none">None</option>
+            <option value="blue-light">Blue-light filtering</option>
+            <option value="reading">Reading glasses</option>
+            <option value="bifocal">Bifocal / progressive</option>
+            <option value="standard-rx">Standard Rx</option>
+          </select>
+        </div>
+      </div>
+      <div class="algo-note">
+        <b>Used by the algorithm</b> to calibrate light output — no data leaves the device.
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMO CONTROLS (prototype scaffolding, not part of app UI) -->
+  <div class="demo-section">
+    <div class="demo-header" id="demoToggleHeader">
+      <span class="demo-header-label">Demo controls</span>
+      <span class="demo-header-note">Prototype scaffolding — not part of the app</span>
+      <span class="demo-chevron" id="demoChevron">▼</span>
+    </div>
+    <div class="demo-body" id="demoBody">
+      <div class="demo-row">
+        <div class="demo-label">Simulated clock</div>
+        <span class="clock-display" id="clockDisplay">09:15</span>
+        <div class="speed-btns">
+          <button class="speed-btn" data-idx="0">1×</button>
+          <button class="speed-btn active" data-idx="1">60×</button>
+          <button class="speed-btn" data-idx="2">600×</button>
+        </div>
+      </div>
+      <div class="demo-row">
+        <div class="demo-label">Mock fisheye sensor — context reading</div>
+        <button class="demo-btn active" id="btnScreen" data-sensor="screen-facing">Facing screen</button>
+        <button class="demo-btn" id="btnPaper" data-sensor="paper-facing">Facing paper</button>
+      </div>
+      <div class="demo-row" style="margin-bottom:0;">
+        <div class="demo-label">Mock zenithal sensor — ambient lux</div>
+        <input type="range" min="10" max="500" value="220" id="luxSlider" style="flex:1;min-width:140px;"/>
+        <span style="font-size:12px;color:var(--ink-dim);width:44px;" id="luxVal">220 lux</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.wrap -->
+
+<script>
+(function(){
+"use strict";
+
+// ── HELPERS ──
+function pad(n){return n.toString().padStart(2,'0');}
+function fmtClock(m){
+  const h=Math.floor(m/60)%24,mn=Math.floor(m%60),h12=((h+11)%12)+1;
+  return h12+':'+pad(mn)+' '+(h<12?'AM':'PM');
+}
+function fmtShort(m){return pad(Math.floor(m/60)%24)+':'+pad(Math.floor(m%60));}
+
+// ── RULES (paper + green/blue-light-counter only) ──
+const RULES = {
+  green:[
+    { id:'g.break', label:'Break due',
+      cond:c=>c.breakState==='firing',
+      variant:{warmth:.4,brightness:.88,blink:true,
+        label:'Break reminder',
+        note:c=>`${Math.round(c.minsSince)} min since last pause — reminder blink active.`}},
+    { id:'g.eyewear', label:'Blue-light filtering glasses',
+      cond:c=>c.eyewear==='blue-light',
+      variant:{warmth:.48,brightness:.6,
+        label:'Lens + counter-balance',
+        note:()=>'Glasses already filter high-frequency light — counter-balance reduced to avoid over-warming.'}},
+    { id:'g.evening', label:'Evening (≥18:00)',
+      cond:c=>c.hour>=18||c.hour<5,
+      variant:{warmth:.78,brightness:.7,
+        label:'Evening counter-balance (strong)',
+        note:c=>`${fmtShort(c.now)} — peak window for blue-light disruption. Spectrum shifted toward 600–700 nm.`}},
+    { id:'g.dimroom', label:'Dim room (<80 lux)',
+      cond:c=>c.lux<80,
+      variant:{warmth:.62,brightness:.8,
+        label:'Dim-room boost',
+        note:c=>`${c.lux} lux ambient — screen blue-light dominates more in a dark room. Counter-balance raised.`}},
+    { id:'g.day', label:'Daytime (5:00–18:00)',
+      cond:c=>c.hour>=5&&c.hour<18,
+      variant:{warmth:.42,brightness:.55,
+        label:'Daytime counter-balance',
+        note:()=>'Daytime — mild warm enrichment to offset screen blue-light peak without distorting nearby colours.'}},
+    { id:'g.default', label:'Default',
+      cond:()=>true,
+      variant:{warmth:.6,brightness:.65,
+        label:'Standard counter-balance',
+        note:()=>"Red/amber-enriched spectrum offsetting the screen's blue-light peak. No filter on the display."}}
+  ],
+  paper:[
+    { id:'p.night', label:'Late night (≥21:00)',
+      cond:c=>c.hour>=21||c.hour<6,
+      variant:{warmth:.85,brightness:.4,
+        label:'Late-night warm read',
+        note:c=>`${fmtShort(c.now)} — warmer, dimmer light to avoid signalling daytime to the body.`}},
+    { id:'p.eyewear', label:'Reading / progressive lenses',
+      cond:c=>c.eyewear==='reading'||c.eyewear==='bifocal',
+      variant:{warmth:.55,brightness:.85,
+        label:'Reading-lens diffused boost',
+        note:()=>'Reading lenses narrow the focal range — brightness raised and diffused to reduce squinting.'}},
+    { id:'p.long', label:'Session ≥45 min',
+      cond:c=>c.sessionMins>=45,
+      variant:{warmth:.55,brightness:.9,
+        label:'Fatigue compensation',
+        note:c=>`${Math.round(c.sessionMins)} min session — brightness raised to counter visual fatigue.`}},
+    { id:'p.dim', label:'Dim room (<60 lux)',
+      cond:c=>c.lux<60,
+      variant:{warmth:.6,brightness:.95,
+        label:'Dim-room paper boost',
+        note:c=>`${c.lux} lux ambient — boosted toward max brightness for legible print contrast.`}},
+    { id:'p.day', label:'Daytime',
+      cond:c=>c.hour>=8&&c.hour<18,
+      variant:{warmth:.25,brightness:.7,
+        label:'Daytime crisp read',
+        note:()=>'Brighter, cooler-leaning warm light for crisp contrast on paper.'}},
+    { id:'p.default', label:'Default',
+      cond:()=>true,
+      variant:{warmth:.65,brightness:.7,
+        label:'Standard paper',
+        note:()=>'Warm, even, low-glare light for reading and handwriting.'}}
+  ]
+};
+
+function evalRules(mode,ctx){
+  const list=RULES[mode];
+  for(const r of list) if(r.cond(ctx)) return r.variant;
+  return list[list.length-1].variant;
+}
+
+// ── COLOR HELPERS ──
+function glowBg(v,on){
+  if(!on) return 'transparent';
+  const w=v.warmth,c=[110,168,255],wm=[255,180,84];
+  const r=Math.round(c[0]+(wm[0]-c[0])*w),g=Math.round(c[1]+(wm[1]-c[1])*w),b=Math.round(c[2]+(wm[2]-c[2])*w);
+  const a=0.18+v.brightness*.32;
+  return `radial-gradient(ellipse 60% 60% at 50% 30%,rgba(${r},${g},${b},${a}) 0%,rgba(${r},${g},${b},0) 70%)`;
+}
+function bulbCol(v,on){
+  if(!on) return '#3a4150';
+  const w=v.warmth,c=[180,210,255],wm=[255,205,140];
+  const r=Math.round(c[0]+(wm[0]-c[0])*w),g=Math.round(c[1]+(wm[1]-c[1])*w),b=Math.round(c[2]+(wm[2]-c[2])*w);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ── STATE ──
+const S={
+  simMins: 9*60+15, speedIdx:1, speeds:[1/60,1,10],
+  lampOn: false,
+  sensorSignal: 'screen-facing',
+  lux: 220,
+  mode: 'green',        // determined by algorithm each tick
+  sessionStart: 0,
+  lastBreakAt: 0,
+  breakState: 'idle',   // idle | firing | cooldown
+  cooldownUntil: null,
+  linked: false,
+  blinkArmed: false,
+};
+const P={
+  age: 24,
+  eyewear: 'none',
+  shiftStart: '09:00',
+  pauseOn: false,
+  pauseInterval: 30,
+};
+
+// ── ALGORITHM: mode chosen from fisheye sensor ──
+function algorithmMode(){
+  return S.sensorSignal==='paper-facing' ? 'paper' : 'green';
+}
+
+// ── BREAK STATE ──
+function minsSince(){ return ((S.simMins-S.lastBreakAt)+24*60)%(24*60); }
+
+function tickBreak(){
+  if(!S.lampOn||!P.pauseOn){ S.breakState='idle'; S.cooldownUntil=null; return; }
+  if(S.breakState==='idle'&&minsSince()>=P.pauseInterval) S.breakState='firing';
+  if(S.breakState==='cooldown'&&S.cooldownUntil!==null){
+    if(S.simMins>=S.cooldownUntil) { S.breakState='idle'; S.cooldownUntil=null; }
+  }
+}
+
+// ── BUILD CTX ──
+function buildCtx(variant){
+  const sessionMins=S.lampOn?Math.max(0,((S.simMins-S.sessionStart)+24*60)%(24*60)):0;
+  return {
+    hour: Math.floor(S.simMins/60)%24,
+    now: S.simMins,
+    lux: S.lux,
+    eyewear: P.eyewear,
+    age: P.age,
+    sessionMins,
+    breakState: S.breakState,
+    minsSince: minsSince(),
+  };
+}
+
+// ── STATUS LINE ──
+function buildStatus(mode,variant,ctx){
+  const modeName = mode==='green'?'Blue light counter':'Paper';
+  const sensorDesc = S.sensorSignal==='paper-facing'?'paper / document surface detected':'screen detected';
+  let why = typeof variant.note==='function' ? variant.note(ctx) : variant.note;
+  return {modeName, sensorDesc, why};
+}
+
+// ── RENDER ──
+function render(){
+  tickBreak();
+
+  // algorithm decides mode each tick
+  if(S.lampOn) S.mode=algorithmMode();
+
+  const ctx=buildCtx();
+  const variant = S.lampOn ? evalRules(S.mode,ctx) : {warmth:.3,brightness:.5,label:'Off'};
+
+  // blink
+  if(S.lampOn&&S.breakState==='firing'&&!S.blinkArmed){
+    S.blinkArmed=true;
+    const f=document.getElementById('blinkFlash');
+    f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+    setTimeout(()=>f.classList.remove('on'),1800);
+  }
+  if(S.breakState!=='firing') S.blinkArmed=false;
+
+  // lamp visual
+  document.getElementById('glowPool').style.background=glowBg(variant,S.lampOn);
+  const bc=bulbCol(variant,S.lampOn);
+  const go=S.lampOn?(0.35+variant.brightness*.5):0;
+  document.getElementById('gs1').setAttribute('stop-color',bc);
+  document.getElementById('gs1').setAttribute('stop-opacity',go);
+  document.getElementById('bulb').setAttribute('fill',bc);
+  document.getElementById('bulb').setAttribute('opacity',S.lampOn?1:0.3);
+  document.getElementById('led').setAttribute('fill',S.lampOn?bc:'#4a5260');
+
+  // readout card (block 1)
+  const modeAccent = S.mode==='green'?'var(--green)':'var(--amber)';
+  const modeLabel = S.mode==='green'?'Blue light counter':'Paper mode';
+  const dotEl=document.getElementById('modeDot');
+  dotEl.style.background = S.lampOn?modeAccent:'var(--ink-faint)';
+  document.getElementById('modeText').textContent = S.lampOn?modeLabel:'Off';
+  const sessionMins=S.lampOn?Math.max(0,((S.simMins-S.sessionStart)+24*60)%(24*60)):0;
+  document.getElementById('modeSub').textContent = S.lampOn
+    ? `${variant.label} · ${Math.round(sessionMins)} min session` : '';
+
+  // sensor readout card (block 1)
+  const srEl=document.getElementById('sensorReadout');
+  if(S.lampOn){
+    srEl.textContent = S.sensorSignal==='paper-facing'?'Paper / document':'Screen';
+    srEl.style.color = S.sensorSignal==='paper-facing'?'var(--amber)':'var(--blue)';
+    document.getElementById('sensorSub').textContent = `${S.lux} lux ambient`;
+  } else {
+    srEl.textContent='—'; srEl.style.color='var(--ink-faint)';
+    document.getElementById('sensorSub').textContent='';
+  }
+
+  // block 2: power + status
+  document.getElementById('powerToggle').checked=S.lampOn;
+  document.getElementById('statusOff').style.display=S.lampOn?'none':'block';
+  document.getElementById('statusOn').style.display=S.lampOn?'block':'none';
+  if(S.lampOn){
+    const {modeName,sensorDesc,why}=buildStatus(S.mode,variant,ctx);
+    const badge=document.getElementById('statusBadge');
+    badge.textContent=modeName;
+    badge.className='status-badge '+(S.mode==='green'?'green':'paper');
+    document.getElementById('statusText').innerHTML=
+      `<b>${sensorDesc}</b>, ${S.lux} lux ambient${S.breakState==='firing'?' · <b>break reminder active</b>':''}.<br/>${why}`;
+  }
+
+  // header link button
+  const lb=document.getElementById('linkBtn');
+  lb.className='link-btn '+(S.linked?'linked':'unlinked');
+  document.getElementById('linkBtnText').textContent=S.linked?'Unlink lamp':'Link lamp';
+
+  // clock
+  document.getElementById('clockDisplay').textContent=fmtClock(S.simMins);
+
+  // demo sensor buttons
+  document.getElementById('btnScreen').className='demo-btn'+(S.sensorSignal==='screen-facing'?' active':'');
+  document.getElementById('btnPaper').className='demo-btn'+(S.sensorSignal==='paper-facing'?' paper-active':'');
+  document.getElementById('luxVal').textContent=S.lux+' lux';
+
+  // pause interval row visibility
+  document.getElementById('intervalRow').style.display=P.pauseOn?'flex':'none';
+}
+
+// ── EVENT WIRING ──
+document.getElementById('linkBtn').addEventListener('click',()=>{
+  S.linked=!S.linked; render();
+});
+
+document.getElementById('powerToggle').addEventListener('change',e=>{
+  S.lampOn=e.target.checked;
+  if(S.lampOn){ S.sessionStart=S.simMins; S.lastBreakAt=S.simMins; S.breakState='idle'; }
+  render();
+});
+
+document.getElementById('shiftStart').addEventListener('change',e=>{
+  P.shiftStart=e.target.value;
+  // update session start to match shift start for circadian calc
+  const [h,m]=e.target.value.split(':').map(Number);
+  S.sessionStart=(h*60+m);
+});
+
+document.getElementById('pauseToggle').addEventListener('change',e=>{
+  P.pauseOn=e.target.checked;
+  if(P.pauseOn) S.lastBreakAt=S.simMins;
+  render();
+});
+
+document.getElementById('pauseInterval').addEventListener('input',e=>{
+  P.pauseInterval=Math.max(5,Number(e.target.value)||30);
+});
+
+document.getElementById('profileAge').addEventListener('input',e=>{
+  P.age=Number(e.target.value)||24;
+});
+
+document.getElementById('profileEyewear').addEventListener('change',e=>{
+  P.eyewear=e.target.value;
+});
+
+// demo controls
+document.getElementById('demoToggleHeader').addEventListener('click',()=>{
+  const body=document.getElementById('demoBody');
+  const chev=document.getElementById('demoChevron');
+  const open=body.classList.toggle('open');
+  chev.classList.toggle('open',open);
+});
+
+document.querySelectorAll('.speed-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    S.speedIdx=Number(btn.dataset.idx);
+  });
+});
+
+document.getElementById('btnScreen').addEventListener('click',()=>{
+  S.sensorSignal='screen-facing'; render();
+});
+document.getElementById('btnPaper').addEventListener('click',()=>{
+  S.sensorSignal='paper-facing'; render();
+});
+
+document.getElementById('luxSlider').addEventListener('input',e=>{
+  S.lux=Number(e.target.value); render();
+});
+
+// ── MAIN LOOP ──
+setInterval(()=>{
+  S.simMins=(S.simMins+S.speeds[S.speedIdx])%(24*60);
+  render();
+},1000);
+
+render();
+})();
+</script>
+</body>
+</html>
